@@ -1,12 +1,18 @@
-﻿<UserControl x:Class="Sequence_Visualizer.SequenceVisualizer"
+﻿<UserControl x:Class="Sequence_Visualizer.SequenceVisualizerViewer"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:local="clr-namespace:Sequence_Visualizer"
              mc:Ignorable="d"
-             d:DesignHeight="300" d:DesignWidth="300">
+             d:DesignHeight="300" d:DesignWidth="500">
     <Grid>
-        
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Label Grid.Row="0" Name="VesselId">VesselId: 123 Date range: 2022-12-12 06:30:55 - 2022-12-12 06:30:55</Label>
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto">
+            <Grid Name="ScrollableSequenceViewer"></Grid>
+        </ScrollViewer>
     </Grid>
 </UserControl>
