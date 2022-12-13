@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Sequence_Visualizer;
@@ -14,7 +16,7 @@ public partial class SequenceVisualizerViewer : UserControl
     private List<List<DisplayItem>> _displayItems;
     private string _startingFieldName = "enter";
     private string _endingFieldName = "exit";
-    private Dictionary<string, Color> _colorsDictionary; 
+    private Dictionary<string, Color> _colorsDictionary;
 
     public SequenceVisualizerViewer()
     {
@@ -44,12 +46,13 @@ public partial class SequenceVisualizerViewer : UserControl
         _displayItems = items;
         RemoveChildren();
         var displayRange = GetDisplayRange(_displayItems);
-        _displayItems.ForEach(x => AddRowGrid(x, displayRange));
+        _displayItems.ForEach(x => AddRowGrid(x, displayRange, string.IsNullOrEmpty(Scale.Text) ? 1.0 : double.Parse(Scale.Text)));
     }
 
     private void RemoveChildren()
     {
         ScrollableSequenceViewer.Children.Clear();
+        ScrollableSequenceViewer.RowDefinitions.Clear();
     }
 
     private static (DateTime?, DateTime?) GetDisplayRange(List<List<DisplayItem>> items)
@@ -60,20 +63,20 @@ public partial class SequenceVisualizerViewer : UserControl
         var range = (dates.Item1.Union(dates.Item2).Min(), dates.Item2.Union(dates.Item1).Max());
         range = (
             dates.Item1.Any(x => x == default)
-                ? (range.Item1 ?? range.Item2 ?? (DateTime?)DateTime.Now)?.AddHours(-1)
+                ? (range.Item1 ?? range.Item2 ?? (DateTime?) DateTime.Now)?.AddHours(-1)
                 : range.Item1,
             dates.Item2.Any(x => x == default)
-                ? (range.Item2 ?? range.Item1 ?? (DateTime?)DateTime.Now)?.AddHours(1)
+                ? (range.Item2 ?? range.Item1 ?? (DateTime?) DateTime.Now)?.AddHours(1)
                 : range.Item2);
 
         return range;
     }
 
-    private void AddRowGrid(List<DisplayItem> items, (DateTime?, DateTime?) range)
+    private void AddRowGrid(List<DisplayItem> items, (DateTime?, DateTime?) range, double scale = 1)
     {
         foreach (var itemList in GetOrderedItems(items))
         {
-            ScrollableSequenceViewer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(50) });
+            ScrollableSequenceViewer.RowDefinitions.Add(new RowDefinition {Height = new GridLength(50)});
             var targetRowId = ScrollableSequenceViewer.RowDefinitions.Count - 1;
             foreach (var item in itemList)
             {
@@ -82,21 +85,34 @@ public partial class SequenceVisualizerViewer : UserControl
                     Content = item.Id,
                     BorderThickness = new Thickness(item.Start == default ? 0 : 1, 1, item.End == default ? 0 : 1, 1),
                     BorderBrush = new SolidColorBrush(Colors.Black),
-                    Margin = new Thickness(((item.Start ?? range.Item1!) - range.Item1!).Value.TotalMinutes, 5, 0, 5),
-                    Width = ((item.End ?? range.Item2!) - (item.Start ?? range.Item1!)).Value.TotalMinutes,
+                    Margin = new Thickness(((item.Start ?? range.Item1!) - range.Item1!).Value.TotalMinutes / scale, 5, 0, 5),
+                    Width = ((item.End ?? range.Item2!) - (item.Start ?? range.Item1!)).Value.TotalMinutes / scale,
                     HorizontalAlignment = HorizontalAlignment.Left,
                     ToolTip = item.Content,
+                    Background = new SolidColorBrush(item.Color),
                 };
                 Grid.SetRow(label, targetRowId);
+                label.MouseLeftButtonUp += LabelOnMouseLeftUp;
+                label.MouseRightButtonUp += LabelOnMouseRightUp;
                 ScrollableSequenceViewer.Children.Add(label);
             }
         }
     }
 
+    private void LabelOnMouseLeftUp(object sender, MouseButtonEventArgs e)
+    {
+        Clipboard.SetText(((Label)sender).Content.ToString()!);
+    }
+
+    private void LabelOnMouseRightUp(object sender, MouseButtonEventArgs e)
+    {
+        Clipboard.SetText(((Label)sender).ToolTip.ToString()!);
+    }
+
     private List<List<DisplayItem>> GetOrderedItems(IEnumerable<DisplayItem> items)
     {
         var orderedItems = items.OrderBy(x => x.Start).ToList();
-        var splittedItems = new List<List<DisplayItem>> { new() };
+        var splittedItems = new List<List<DisplayItem>> {new()};
 
         foreach (var item in orderedItems)
         {
@@ -113,7 +129,7 @@ public partial class SequenceVisualizerViewer : UserControl
 
             if (!isAdded)
             {
-                splittedItems.Add(new List<DisplayItem> { item });
+                splittedItems.Add(new List<DisplayItem> {item});
             }
         }
 
@@ -135,15 +151,37 @@ public partial class SequenceVisualizerViewer : UserControl
 
         items.Add(new List<DisplayItem>
         {
-            DisplayItem.Create(itemA, _startingFieldName, _endingFieldName)
+            DisplayItem.Create(itemA, _startingFieldName, _endingFieldName, string.Empty, new Dictionary<string, Color>())
         });
         items.Add(new List<DisplayItem>
         {
-            DisplayItem.Create(itemB, _startingFieldName, _endingFieldName),
-            DisplayItem.Create(itemC, _startingFieldName, _endingFieldName),
-            DisplayItem.Create(itemD, _startingFieldName, _endingFieldName)
+            DisplayItem.Create(itemB, _startingFieldName, _endingFieldName, string.Empty, new Dictionary<string, Color>()),
+            DisplayItem.Create(itemC, _startingFieldName, _endingFieldName, string.Empty, new Dictionary<string, Color>()),
+            DisplayItem.Create(itemD, _startingFieldName, _endingFieldName, string.Empty, new Dictionary<string, Color>())
         });
 
         return items;
+    }
+
+    private static readonly Regex _regex = new Regex("[^0-9.]+");
+
+    private static bool IsTextAllowed(string text)
+    {
+        return !_regex.IsMatch(text);
+    }
+
+    private new void PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        e.Handled = !IsTextAllowed(e.Text);
+    }
+
+    private void Scale_OnKeyUp(object sender, KeyEventArgs e)
+    {
+        SetDisplayItems(_displayItems);
+    }
+
+    private void UIElement_OnPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        SetDisplayItems(_displayItems);
     }
 }
