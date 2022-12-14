@@ -13,7 +13,7 @@ namespace Sequence_Visualizer;
 
 public partial class SequenceVisualizerViewer : UserControl
 {
-    private List<List<DisplayItem>> _displayItems;
+    private IDictionary<string, List<List<DisplayItem>>> _displayItems;
     private string _startingFieldName = "enter";
     private string _endingFieldName = "exit";
     private Dictionary<string, Color> _colorsDictionary;
@@ -21,7 +21,7 @@ public partial class SequenceVisualizerViewer : UserControl
     public SequenceVisualizerViewer()
     {
         InitializeComponent();
-        _displayItems = new List<List<DisplayItem>>();
+        _displayItems = new Dictionary<string, List<List<DisplayItem>>> {{string.Empty, new List<List<DisplayItem>>()}};
         SetDisplayItems(GetDebugItems());
     }
 
@@ -41,12 +41,34 @@ public partial class SequenceVisualizerViewer : UserControl
         }
     }
 
-    public void SetDisplayItems(List<List<DisplayItem>> items)
+    public void SetDisplayItems(IDictionary<string, List<List<DisplayItem>>> items)
     {
         _displayItems = items;
         RemoveChildren();
         var displayRange = GetDisplayRange(_displayItems);
-        _displayItems.ForEach(x => AddRowGrid(x, displayRange, string.IsNullOrEmpty(Scale.Text) ? 1.0 : double.Parse(Scale.Text)));
+        var scale = string.IsNullOrEmpty(Scale.Text) ? 1.0 : double.Parse(Scale.Text);
+        foreach (var displayItem in _displayItems)
+        {
+            ScrollableSequenceViewer.RowDefinitions.Add(new RowDefinition {Height = new GridLength(25)});
+            var targetRowId = ScrollableSequenceViewer.RowDefinitions.Count - 1;
+
+            var headerLabel = new Label()
+            {
+                Content = displayItem.Key,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Colors.CornflowerBlue),
+                Width = (displayRange.Item2! - displayRange.Item1!).Value.TotalMinutes / scale + 1,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                ToolTip = displayItem.Key,
+                Background = new SolidColorBrush(Colors.CornflowerBlue),
+            };
+            Grid.SetRow(headerLabel, targetRowId);
+            ScrollableSequenceViewer.Children.Add(headerLabel);
+
+            displayItem.Value.ForEach(x =>
+                AddRowGrid(x, displayRange, scale));
+        }
     }
 
     private void RemoveChildren()
@@ -55,11 +77,11 @@ public partial class SequenceVisualizerViewer : UserControl
         ScrollableSequenceViewer.RowDefinitions.Clear();
     }
 
-    private static (DateTime?, DateTime?) GetDisplayRange(List<List<DisplayItem>> items)
+    private static (DateTime?, DateTime?) GetDisplayRange(IDictionary<string, List<List<DisplayItem>>> items)
     {
         var dates = (
-            items.SelectMany(x => x.Select(y => y.Start)).ToList(),
-            items.SelectMany(x => x.Select(y => y.End)).ToList());
+            items.SelectMany(z => z.Value.SelectMany(x => x.Select(y => y.Start))).ToList(),
+            items.SelectMany(z => z.Value.SelectMany(x => x.Select(y => y.End)).ToList()));
         var range = (dates.Item1.Union(dates.Item2).Min(), dates.Item2.Union(dates.Item1).Max());
         range = (
             dates.Item1.Any(x => x == default)
@@ -72,7 +94,7 @@ public partial class SequenceVisualizerViewer : UserControl
         return range;
     }
 
-    private void AddRowGrid(List<DisplayItem> items, (DateTime?, DateTime?) range, double scale = 1)
+    private void AddRowGrid(IEnumerable<DisplayItem> items, (DateTime?, DateTime?) range, double scale = 1)
     {
         foreach (var itemList in GetOrderedItems(items))
         {
@@ -85,7 +107,8 @@ public partial class SequenceVisualizerViewer : UserControl
                     Content = item.Id,
                     BorderThickness = new Thickness(item.Start == default ? 0 : 1, 1, item.End == default ? 0 : 1, 1),
                     BorderBrush = new SolidColorBrush(Colors.Black),
-                    Margin = new Thickness(((item.Start ?? range.Item1!) - range.Item1!).Value.TotalMinutes / scale, 5, 0, 5),
+                    Margin = new Thickness(((item.Start ?? range.Item1!) - range.Item1!).Value.TotalMinutes / scale, 5,
+                        0, 5),
                     Width = ((item.End ?? range.Item2!) - (item.Start ?? range.Item1!)).Value.TotalMinutes / scale,
                     HorizontalAlignment = HorizontalAlignment.Left,
                     ToolTip = item.Content,
@@ -101,12 +124,12 @@ public partial class SequenceVisualizerViewer : UserControl
 
     private void LabelOnMouseLeftUp(object sender, MouseButtonEventArgs e)
     {
-        Clipboard.SetText(((Label)sender).Content.ToString()!);
+        Clipboard.SetText(((Label) sender).Content.ToString()!);
     }
 
     private void LabelOnMouseRightUp(object sender, MouseButtonEventArgs e)
     {
-        Clipboard.SetText(((Label)sender).ToolTip.ToString()!);
+        Clipboard.SetText(string.Concat(((Label) sender).ToolTip.ToString().Split("\n")));
     }
 
     private List<List<DisplayItem>> GetOrderedItems(IEnumerable<DisplayItem> items)
@@ -136,7 +159,7 @@ public partial class SequenceVisualizerViewer : UserControl
         return splittedItems;
     }
 
-    private List<List<DisplayItem>> GetDebugItems()
+    private IDictionary<string, List<List<DisplayItem>>> GetDebugItems()
     {
         var items = new List<List<DisplayItem>>();
 
@@ -151,16 +174,20 @@ public partial class SequenceVisualizerViewer : UserControl
 
         items.Add(new List<DisplayItem>
         {
-            DisplayItem.Create(itemA, _startingFieldName, _endingFieldName, string.Empty, new Dictionary<string, Color>())
+            DisplayItem.Create(itemA, string.Empty, _startingFieldName, _endingFieldName, string.Empty,
+                new Dictionary<string, Color>())
         });
         items.Add(new List<DisplayItem>
         {
-            DisplayItem.Create(itemB, _startingFieldName, _endingFieldName, string.Empty, new Dictionary<string, Color>()),
-            DisplayItem.Create(itemC, _startingFieldName, _endingFieldName, string.Empty, new Dictionary<string, Color>()),
-            DisplayItem.Create(itemD, _startingFieldName, _endingFieldName, string.Empty, new Dictionary<string, Color>())
+            DisplayItem.Create(itemB, string.Empty, _startingFieldName, _endingFieldName, string.Empty,
+                new Dictionary<string, Color>()),
+            DisplayItem.Create(itemC, string.Empty, _startingFieldName, _endingFieldName, string.Empty,
+                new Dictionary<string, Color>()),
+            DisplayItem.Create(itemD, string.Empty, _startingFieldName, _endingFieldName, string.Empty,
+                new Dictionary<string, Color>())
         });
 
-        return items;
+        return new Dictionary<string, List<List<DisplayItem>>> {{string.Empty, items}};
     }
 
     private static readonly Regex _regex = new Regex("[^0-9.]+");
